@@ -1,175 +1,163 @@
-<!-- TODO: tuliskan tampilan view anda disini -->
 <!DOCTYPE html>
 <html lang="id">
-
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Produk</title>
+  <title>Manajemen Produk</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
-
-<body class="bg-gray-100">
-{{-- FORM PENCARIAN DAN FILTER PRODUK --}}
-<div class="mb-6 bg-white p-4 rounded-lg shadow flex flex-col sm:flex-row sm:items-center gap-4">
-  <form action="{{ route('produk.index') }}" method="GET" class="flex flex-col sm:flex-row sm:items-center gap-4 w-full">
-
-    {{-- Input Pencarian Produk --}}
-    <div class="w-full sm:w-1/3">
-      <input
-        type="text"
-        name="search"
-        value="{{ request('search') }}"
-        placeholder="Cari nama produk..."
-        class="w-full p-2 border rounded text-sm sm:text-base"
-      >
+<body class="bg-gray-100 p-6">
+  <div class="max-w-6xl mx-auto bg-white p-6 rounded shadow">
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-4">
+      <h1 class="text-2xl font-bold">Manajemen Produk</h1>
+      <a href="{{ route('produk.create') }}" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">+ Tambah Produk</a>
     </div>
 
-    {{-- Dropdown Filter Kategori --}}
-    <div class="w-full sm:w-1/4">
-      <select name="kategori" class="w-full p-2 border rounded text-sm sm:text-base">
-        <option value="">Semua Kategori</option>
-        @php
-          $kategoriList = \App\Models\Produk::select('kategori')->distinct()->pluck('kategori');
-        @endphp
-        @foreach ($kategoriList as $kategori)
-          <option value="{{ $kategori }}" {{ request('kategori') == $kategori ? 'selected' : '' }}>
-            {{ $kategori }}
-          </option>
-        @endforeach
-      </select>
-    </div>
+    <!-- Filter dan Pencarian -->
+    <form method="GET" action="{{ route('produk.index') }}" class="flex flex-col md:flex-row gap-4 mb-6">
+      <div class="w-full md:w-1/2">
+        <input type="text" name="search" placeholder="Cari produk..." 
+               value="{{ request('search') }}" 
+               class="w-full border px-3 py-2 rounded">
+      </div>
+      <div class="w-full md:w-1/4">
+        <select name="kategori" class="w-full border px-3 py-2 rounded">
+          <option value="all">Semua Kategori</option>
+          @foreach($kategoriList as $kategori)
+            <option value="{{ $kategori }}" {{ request('kategori') == $kategori ? 'selected' : '' }}>
+              {{ $kategori }}
+            </option>
+          @endforeach
+        </select>
+      </div>
+      <div class="w-full md:w-1/4 flex gap-2">
+        <input type="number" name="min_harga" placeholder="Harga Min" 
+               value="{{ request('min_harga') }}" 
+               class="w-1/2 border px-3 py-2 rounded" min="0">
+        <input type="number" name="max_harga" placeholder="Harga Max" 
+               value="{{ request('max_harga') }}" 
+               class="w-1/2 border px-3 py-2 rounded" min="0">
+      </div>
+      <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Filter</button>
+    </form>
 
-    {{-- Tombol Aksi --}}
-    <div class="flex gap-2">
-      <button
-        type="submit"
-        class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition text-sm sm:text-base"
-      >
-        Cari
-      </button>
-      <a
-        href="{{ route('produk.index') }}"
-        class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 transition text-sm sm:text-base"
-      >
-        Tampilkan Semua
-      </a>
-    </div>
-    
-  </form>
-</div>
-
-
-  <div class="max-w-7xl mx-auto p-6">
-    <h1 class="text-3xl sm:text-4xl font-semibold text-gray-800 mb-6">Produk</h1>
-
-    {{-- Pesan sukses --}}
-    @if(session('success'))
-      <div class="mb-4 text-green-600">{{ session('success') }}</div>
-    @endif
-
-    {{-- Jika ada variabel $action, tampilkan form --}}
-    @if(isset($action))
-      {{-- FORM TAMBAH / EDIT --}}
-      @if($errors->any())
-        <div class="mb-4 text-red-600">
-          <ul>
-            @foreach($errors->all() as $error)
-              <li>{{ $error }}</li>
-            @endforeach
-          </ul>
+    <!-- Tabel Daftar Produk -->
+    <div>
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-semibold">Daftar Produk</h2>
+        <div class="flex gap-2">
+          <span class="text-sm text-gray-600">Urutkan:</span>
+          <select onchange="window.location.href = updateQueryStringParameter('sort_by', this.value)" 
+                  class="border px-2 py-1 rounded text-sm">
+            <option value="nama" {{ request('sort_by') == 'nama' ? 'selected' : '' }}>Nama</option>
+            <option value="harga" {{ request('sort_by') == 'harga' ? 'selected' : '' }}>Harga</option>
+            <option value="created_at" {{ !request('sort_by') || request('sort_by') == 'created_at' ? 'selected' : '' }}>Terbaru</option>
+          </select>
+          <select onchange="window.location.href = updateQueryStringParameter('sort_dir', this.value)" 
+                  class="border px-2 py-1 rounded text-sm">
+            <option value="asc" {{ request('sort_dir') == 'asc' ? 'selected' : '' }}>A-Z</option>
+            <option value="desc" {{ !request('sort_dir') || request('sort_dir') == 'desc' ? 'selected' : '' }}>Z-A</option>
+          </select>
         </div>
-      @endif
-
-      <form action="{{ $action }}" method="POST" class="space-y-4 bg-white p-6 rounded shadow">
-        @csrf
-        @if(isset($method) && $method == 'PUT')
-          @method('PUT')
-        @endif
-
-        <div>
-          <label class="block text-gray-700 text-sm sm:text-base">Nama Produk</label>
-          <input type="text" name="nama" value="{{ old('nama', $produk->nama ?? '') }}" class="w-full p-2 border rounded text-sm sm:text-base">
-        </div>
-
-        <div>
-          <label class="block text-gray-700 text-sm sm:text-base">Harga</label>
-          <input type="number" name="harga" value="{{ old('harga', $produk->harga ?? '') }}" class="w-full p-2 border rounded text-sm sm:text-base">
-        </div>
-
-        <div>
-          <label class="block text-gray-700 text-sm sm:text-base">Deskripsi</label>
-          <textarea name="deskripsi" class="w-full p-2 border rounded text-sm sm:text-base">{{ old('deskripsi', $produk->deskripsi ?? '') }}</textarea>
-        </div>
-
-        <div>
-          <label class="block text-gray-700 text-sm sm:text-base">Kategori</label>
-          <input type="text" name="kategori" value="{{ old('kategori', $produk->kategori ?? '') }}" class="w-full p-2 border rounded text-sm sm:text-base">
-        </div>
-
-        <div class="flex flex-col sm:flex-row justify-between">
-          <a href="{{ route('produk.index') }}" class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 mb-4 sm:mb-0">Kembali</a>
-          <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
-            {{ isset($method) && $method == 'PUT' ? 'Update' : 'Simpan' }}
-          </button>
-        </div>
-      </form>
-
-    @else
-      {{-- TABEL DAFTAR PRODUK --}}
-      <div class="flex justify-between items-center mb-6">
-        <a href="{{ route('produk.create') }}" class="bg-blue-600 text-white px-6 py-2 rounded-lg shadow hover:bg-blue-700 transition">Tambah Produk</a>
       </div>
 
-      <div class="bg-white shadow-md rounded-lg overflow-hidden">
-        <table class="w-full text-left border-collapse">
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border">
           <thead class="bg-gray-200">
             <tr>
-              <th class="px-6 py-3 text-sm sm:text-base font-medium text-gray-700">Nama Produk</th>
-              <th class="px-6 py-3 text-sm sm:text-base font-medium text-gray-700">Harga</th>
-              <th class="px-6 py-3 text-sm sm:text-base font-medium text-gray-700">Deskripsi</th>
-              <th class="px-6 py-3 text-sm sm:text-base font-medium text-gray-700">Kategori</th>
-              <th class="px-6 py-3 text-sm sm:text-base font-medium text-gray-700">Aksi</th>
+              <th class="p-3">Nama</th>
+              <th class="p-3">Harga</th>
+              <th class="p-3">Kategori</th>
+              <th class="p-3">Stok</th>
+              <th class="p-3">Aksi</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-gray-200">
+          <tbody>
             @forelse($produk as $item)
-            <tr>
-              <td class="px-6 py-4 text-sm sm:text-base text-gray-800">{{ $item->nama }}</td>
-              <td class="px-6 py-4 text-sm sm:text-base text-gray-800">{{ $item->harga_format }}</td>
-              <td class="px-6 py-4 text-sm sm:text-base text-gray-800">{{ $item->deskripsi }}</td>
-              <td class="px-6 py-4 text-sm sm:text-base text-gray-800">{{ $item->kategori }}</td>
-              <td class="px-6 py-4 space-x-2">
-                <a href="{{ route('produk.edit', $item->id) }}" class="bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600 transition">Edit</a>
-                <form action="{{ route('produk.destroy', $item->id) }}" method="POST" class="inline-block">
-                  @csrf
-                  @method('DELETE')
-                  <button type="submit" class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition" onclick="return confirm('Yakin ingin menghapus?')">Hapus</button>
-                </form>
-              </td>
-            </tr>
+              <tr class="border-t hover:bg-gray-50 {{ session('highlight') == $item->id ? 'bg-blue-50' : '' }} 
+                  {{ session('deleted') == $item->id ? 'bg-red-50' : '' }}">
+                <td class="p-3 font-medium">{{ $item->nama }}</td>
+                <td class="p-3">Rp {{ number_format($item->harga, 0, ',', '.') }}</td>
+                <td class="p-3">{{ $item->kategori }}</td>
+                <td class="p-3">{{ $item->stok }}</td>
+                <td class="p-3 space-x-2">
+                  <a href="{{ route('produk.edit', $item->id) }}" 
+                     class="bg-yellow-400 px-3 py-1 rounded text-white hover:bg-yellow-500">Edit</a>
+                  <form action="{{ route('produk.destroy', $item->id) }}" method="POST" class="inline">
+                    @csrf
+                    @method('DELETE')
+                    <button type="submit" 
+                            onclick="return confirm('Apakah Anda yakin ingin menghapus produk ini?')"
+                            class="bg-red-600 px-3 py-1 rounded text-white hover:bg-red-700">Hapus</button>
+                  </form>
+                  <a href="{{ route('produk.show', $item->id) }}" 
+                     class="bg-green-600 px-3 py-1 rounded text-white hover:bg-green-700">Detail</a>
+                </td>
+              </tr>
             @empty
-            <tr>
-              <td colspan="5" class="px-6 py-4 text-sm sm:text-base text-gray-800 text-center">Tidak ada produk tersedia.</td>
-            </tr>
+              <tr>
+                <td colspan="5" class="p-3 text-center text-gray-500">Tidak ada produk ditemukan</td>
+              </tr>
             @endforelse
           </tbody>
         </table>
       </div>
+    </div>
 
-      @if($produk instanceof \Illuminate\Pagination\LengthAwarePaginator && $produk->hasPages())
-      <div class="flex justify-between items-center mt-6 text-sm sm:text-base text-gray-600">
-        <span>Menampilkan {{ $produk->firstItem() }} - {{ $produk->lastItem() }} dari {{ $produk->total() }} produk</span>
-        <div class="flex gap-1">
-          {{ $produk->links() }}
-        </div>
+    <!-- Pagination -->
+    <div class="flex justify-between items-center mt-4 text-sm text-gray-600">
+      <span>Menampilkan {{ $produk->firstItem() }} - {{ $produk->lastItem() }} dari {{ $produk->total() }} produk</span>
+      <div class="flex gap-1">
+        @if ($produk->onFirstPage())
+          <span class="px-2 py-1 border rounded text-gray-400">&laquo;</span>
+        @else
+          <a href="{{ $produk->previousPageUrl() }}" class="px-2 py-1 border rounded hover:bg-gray-100">&laquo;</a>
+        @endif
+
+        @foreach ($produk->getUrlRange(1, $produk->lastPage()) as $page => $url)
+          @if ($page == $produk->currentPage())
+            <span class="px-3 py-1 border rounded bg-blue-600 text-white">{{ $page }}</span>
+          @else
+            <a href="{{ $url }}" class="px-3 py-1 border rounded hover:bg-gray-100">{{ $page }}</a>
+          @endif
+        @endforeach
+
+        @if ($produk->hasMorePages())
+          <a href="{{ $produk->nextPageUrl() }}" class="px-2 py-1 border rounded hover:bg-gray-100">&raquo;</a>
+        @else
+          <span class="px-2 py-1 border rounded text-gray-400">&raquo;</span>
+        @endif
       </div>
-      @endif
-
-    @endif
-
+    </div>
   </div>
 
-</body>
+  <!-- Flash Message -->
+  @if(session('success'))
+    <div class="fixed bottom-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg">
+      {{ session('success') }}
+    </div>
+    <script>
+      setTimeout(() => document.querySelector('.fixed').remove(), 3000);
+    </script>
+  @endif
 
+  @if(session('error'))
+    <div class="fixed bottom-4 right-4 bg-red-500 text-white px-4 py-2 rounded shadow-lg">
+      {{ session('error') }}
+    </div>
+    <script>
+      setTimeout(() => document.querySelector('.fixed').remove(), 3000);
+    </script>
+  @endif
+
+  <script>
+    function updateQueryStringParameter(key, value) {
+      const url = new URL(window.location.href);
+      url.searchParams.set(key, value);
+      return url.toString();
+    }
+  </script>
+</body>
 </html>

@@ -4,88 +4,176 @@ namespace App\Http\Controllers;
 
 use App\Models\Produk;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 
-//TODO: tuliskan kode controller untuk produk anda disini
 class ProdukController extends Controller
 {
-    // Menampilkan daftar produk dengan pagination + pencarian + filter kategori
+    // Menampilkan daftar produk dengan filter, pencarian, dan sorting
     public function index(Request $request)
     {
         $query = Produk::query();
 
-        // Jika ada pencarian nama produk
+        // Pencarian berdasarkan nama/deskripsi
         if ($request->filled('search')) {
-            $query->where('nama', 'like', '%' . $request->search . '%');
+            $searchTerm = $request->search;
+            $query->where(function($q) use ($searchTerm) {
+                $q->where('nama', 'like', "%{$searchTerm}%")
+                  ->orWhere('deskripsi', 'like', "%{$searchTerm}%");
+            });
         }
 
-        // Jika ada filter kategori
-        if ($request->filled('kategori')) {
+        // Filter kategori
+        if ($request->filled('kategori') && $request->kategori !== 'all') {
             $query->where('kategori', $request->kategori);
         }
 
-        // Ambil produk terbaru + pagination + withQueryString agar pagination ikut query pencarian
-        $produk = $query->latest()->paginate(10)->withQueryString();
+        // Filter harga
+        if ($request->filled('min_harga')) {
+            $query->where('harga', '>=', $request->min_harga);
+        }
+        if ($request->filled('max_harga')) {
+            $query->where('harga', '<=', $request->max_harga);
+        }
 
-        // Ambil semua kategori unik untuk dropdown filter
-        $kategoriList = Produk::select('kategori')->distinct()->pluck('kategori');
+        // Sorting
+        $sortField = $request->get('sort_by', 'created_at');
+        $sortDirection = $request->get('sort_dir', 'desc');
+        $query->orderBy($sortField, $sortDirection);
 
-        return view('produk', compact('produk', 'kategoriList'));
+        $produk = $query->paginate(15)->withQueryString();
+
+        // Data tambahan
+        $kategoriList = Produk::select('kategori')->distinct()->orderBy('kategori')->pluck('kategori');
+        $hargaRange = [
+            'min' => Produk::min('harga'),
+            'max' => Produk::max('harga')
+        ];
+
+        return view('produk.index', compact('produk', 'kategoriList', 'hargaRange'));
     }
 
-    // Menampilkan form untuk membuat produk baru
+    // Menampilkan form tambah produk
     public function create()
     {
-        return view('produk', [
+        $topKategori = Produk::select('kategori')
+            ->groupBy('kategori')
+            ->orderByRaw('COUNT(*) DESC')
+            ->limit(5)
+            ->pluck('kategori');
+
+        return view('produk.form', [
             'action' => route('produk.store'),
             'method' => 'POST',
-            'produk' => new Produk()
+            'produk' => new Produk(),
+            'topKategori' => $topKategori,
+            'title' => 'Tambah Produk Baru'
         ]);
     }
 
-    // Menyimpan produk baru ke dalam database
+    // Menyimpan produk baru
     public function store(Request $request)
     {
-        $request->validate([
-            'nama' => 'required',
-            'harga' => 'required|numeric',
-            'deskripsi' => 'required',
-            'kategori' => 'required',
+        $validated = $request->validate([
+            'nama' => 'required|string|max:255|unique:produk,nama',
+            'harga' => 'required|numeric|min:0',
+            'deskripsi' => 'required|string|min:10',
+            'kategori' => 'required|string|max:100',
+            'gambar' => 'nullable|image|max:2048',
+            'stok' => 'required|integer|min:0'
         ]);
 
-        Produk::create($request->only(['nama', 'harga', 'deskripsi', 'kategori']));
+        if ($request->hasFile('gambar')) {
+            $validated['gambar_path'] = $request->file('gambar')->store('produk-images', 'public');
+        }
 
-        return redirect()->route('produk.index')->with('success', 'Produk berhasil ditambahkan.');
+        $produk = Produk::create($validated);
+
+        return redirect()->route('produk.index')
+            ->with('success', 'Produk berhasil ditambahkan.')
+            ->with('highlight', $produk->id);
     }
 
-    // Menampilkan form untuk mengedit produk
+    // Menampilkan detail produk
+    public function show(Produk $produk)
+    {
+        return view('produk.show', compact('produk'));
+    }
+
+    // Menampilkan form edit
     public function edit(Produk $produk)
     {
-        return view('produk', [
+        $topKategori = Produk::select('kategori')
+            ->groupBy('kategori')
+            ->orderByRaw('COUNT(*) DESC')
+            ->limit(5)
+            ->pluck('kategori');
+
+        return view('produk.form', [
             'action' => route('produk.update', $produk),
             'method' => 'PUT',
-            'produk' => $produk
+            'produk' => $produk,
+            'topKategori' => $topKategori,
+            'title' => 'Edit Produk: ' . $produk->nama
         ]);
     }
 
     // Memperbarui data produk
     public function update(Request $request, Produk $produk)
     {
-        $request->validate([
-            'nama' => 'required',
-            'harga' => 'required|numeric',
-            'deskripsi' => 'required',
-            'kategori' => 'required',
+        $validated = $request->validate([
+            'nama' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('produk')->ignore($produk->id)
+            ],
+            'harga' => 'required|numeric|min:0',
+            'deskripsi' => 'required|string|min:10',
+            'kategori' => 'required|string|max:100',
+            'gambar' => 'nullable|image|max:2048',
+            'stok' => 'required|integer|min:0'
         ]);
 
-        $produk->update($request->only(['nama', 'harga', 'deskripsi', 'kategori']));
+        if ($request->hasFile('gambar')) {
+            if ($produk->gambar_path) {
+                Storage::disk('public')->delete($produk->gambar_path);
+            }
+            $validated['gambar_path'] = $request->file('gambar')->store('produk-images', 'public');
+        }
 
-        return redirect()->route('produk.index')->with('success', 'Produk berhasil diperbarui.');
+        $produk->update($validated);
+
+        return redirect()->route('produk.index')
+            ->with('success', 'Produk berhasil diperbarui.')
+            ->with('highlight', $produk->id);
     }
 
     // Menghapus produk
     public function destroy(Produk $produk)
     {
-        $produk->delete();
-        return redirect()->route('produk.index')->with('success', 'Produk berhasil dihapus.');
+        try {
+            if ($produk->gambar_path) {
+                Storage::disk('public')->delete($produk->gambar_path);
+            }
+
+            $produk->delete();
+
+            return redirect()->route('produk.index')
+                ->with('success', 'Produk berhasil dihapus.')
+                ->with('deleted', $produk->id);
+        } catch (\Exception $e) {
+            return redirect()->back()
+                ->with('error', 'Gagal menghapus produk: ' . $e->getMessage());
+        }
+    }
+
+    // Endpoint API produk
+    public function apiIndex()
+    {
+        return response()->json([
+            'data' => Produk::all(),
+            'message' => 'Data produk berhasil diambil'
+        ]);
     }
 }
